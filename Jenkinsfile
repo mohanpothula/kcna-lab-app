@@ -4,15 +4,15 @@ pipeline {
 
     environment {
         // Change these to match your Docker Hub and Image details
-        DOCKER_HUB_USER = "your-username"
-        IMAGE_NAME = "kcna-demo-app"
+        DOCKER_HUB_USER = "mohanpothula"
+        IMAGE_NAME = "my-hello-app"
         IMAGE_TAG = "${env.BUILD_ID}" // Best practice: unique tag per build
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git 'https://github.com/your-repo/kcna-lab-app.git'
+                git 'https://github.com/mohanpothula/kcna-lab-app.git'
             }
         }
 
