@@ -33,4 +33,19 @@ pipeline {
             }
         }
 
-        
+        stage('K8s Deploy') {
+            steps {
+                // Remove withKubeConfig block if Jenkins runs natively in the cluster with RBAC 
+                // withKubeConfig([credentialsId: 'k8s-config']) {
+                    sh 'kubectl set image deployment/my-app my-container=$DOCKER_HUB_USER/$IMAGE_NAME:$IMAGE_TAG --record'
+                // }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Successfully deployed version ${env.IMAGE_TAG} to Kubernetes!"
+        }
+    }
+}
