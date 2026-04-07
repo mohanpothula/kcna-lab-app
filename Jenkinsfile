@@ -1,12 +1,12 @@
 pipeline {
     agent {
-        // This spins up a custom pod for this build
+        // This spins up a custom pod for this build containing Docker
         kubernetes {
             yaml '''
             apiVersion: v1
             kind: Pod
             spec:
-              serviceAccountName: jenkins # Required if you're deploying with kubectl later
+              serviceAccountName: jenkins 
               containers:
               - name: docker
                 image: docker:cli
@@ -25,6 +25,7 @@ pipeline {
     }
 
     environment {
+        // Automatically injects your Docker Hub namespace and App details
         DOCKER_HUB_USER = "mohanpothula"
         IMAGE_NAME = "my-hello-app"
         IMAGE_TAG = "${env.BUILD_ID}"
@@ -39,8 +40,8 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                // We must explicitly run these steps inside the 'docker' container we defined above
                 container('docker') {
+                    // Single quotes are crucial here so the shell evaluates the variables
                     sh 'docker build -t $DOCKER_HUB_USER/$IMAGE_NAME:$IMAGE_TAG .'
                 }
             }
@@ -49,6 +50,7 @@ pipeline {
         stage('Docker Push') {
             steps {
                 container('docker') {
+                    // Make sure the Jenkins UI credential ID is set exactly to 'docker-hub-id'
                     withCredentials([usernamePassword(credentialsId: 'docker-hub-id', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                         sh 'echo $PASS | docker login -u $USER --password-stdin'
                         sh 'docker push $DOCKER_HUB_USER/$IMAGE_NAME:$IMAGE_TAG'
@@ -59,17 +61,43 @@ pipeline {
 
         stage('K8s Deploy') {
             steps {
-                // Using the default Jenkins jnlp container for kubectl commands
+                // Download kubectl into the workspace dynamically 
                 sh 'curl -LO "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl"'
                 sh 'chmod +x ./kubectl'
-                sh './kubectl set image deployment/my-app my-container=$DOCKER_HUB_USER/$IMAGE_NAME:$IMAGE_TAG --record'
+                
+                // Deploy using a generated manifest. 
+                // Using 'apply' will create the deployment if it doesn't exist, and update it if it does.
+                sh '''
+                cat <<EOF | ./kubectl apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+  namespace: jenkins
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+      - name: my-container
+        image: $DOCKER_HUB_USER/$IMAGE_NAME:$IMAGE_TAG
+        ports:
+        - containerPort: 80
+EOF
+                '''
             }
         }
     }
 
     post {
         success {
-            echo "Successfully deployed version ${env.IMAGE_TAG} to Kubernetes!"
+            echo "Successfully built, pushed, and deployed version ${env.IMAGE_TAG} to Kubernetes!"
         }
     }
 }
